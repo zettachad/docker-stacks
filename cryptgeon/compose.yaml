@@ -1,0 +1,25 @@
+version: "3.8"
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 500mb --maxmemory-policy allkeys-lru
+  cryptgeon:
+    image: cupcakearmy/cryptgeon:latest
+    restart: unless-stopped
+    environment:
+      # Size limit for a single note.
+      SIZE_LIMIT: 10 MiB
+    depends_on:
+      - redis
+    networks:
+      - default
+      - webgateway
+    labels:
+      - traefik.http.routers.cryptgeon.rule=Host(`${SUBDOMAIN}.kush.in`)
+      - traefik.http.routers.cryptgeon.tls=true
+      - traefik.http.routers.cryptgeon.tls.certResolver=letsencrypt
+      - traefik.http.services.cryptgeon.loadbalancer.server.port=8000
+networks:
+  webgateway:
+    external: true

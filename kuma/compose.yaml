@@ -1,0 +1,20 @@
+version: "3.3"
+services:
+  uptime-kuma:
+    restart: always
+    volumes:
+      - /home/ubuntu/devbox-store/uptime-kuma:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    container_name: uptime-kuma
+    image: louislam/uptime-kuma:1
+    labels:
+      - traefik.http.routers.kuma.rule=Host(`${SUBDOMAIN}.kush.in`)
+      - traefik.http.routers.kuma.tls=true
+      - traefik.http.routers.kuma.tls.certResolver=letsencrypt
+      - traefik.http.services.kuma.loadbalancer.server.port=3001
+    networks:
+      - default
+      - webgateway
+networks:
+  webgateway:
+    external: true
