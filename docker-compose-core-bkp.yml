@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v3.0
+    restart: always
+    networks:
+      - webgateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik-acme-data:/etc/traefik/acme
+    command:
+      # Enable dashboard
+      - --api.dashboard=true
+      # Entrypoints
+      - --entrypoints=Name:http Address::80 Redirect.EntryPoint:https
+      - --entrypoints=Name:https Address::443 TLS
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.forwardedHeaders.trustedIPs=127.0.0.1/32,192.168.1.7
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/etc/traefik/acme/acme.json
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      # Uncomment line below to use ACME staging dir
+      #- --certificatesresolvers.letsencrypt.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      - --providers.docker=true
+      - --log.level=debug
+      - --providers.docker.network=webgateway
+    labels:
+      # Dashboard config
+      - traefik.http.routers.traefik-dash.rule=Host(`traefik.${DOMAIN}`)
+      - traefik.http.routers.traefik-dash.service=api@internal
+      - traefik.http.routers.traefik-dash.middlewares=traefik-dash-auth
+      - traefik.http.routers.traefik-dash.tls=true
+      - traefik.http.routers.traefik-dash.tls.certResolver=letsencrypt
+      - traefik.http.middlewares.plain-to-www.redirectregex.regex=^https?://(?:www\.)?(.*)
+      - traefik.http.middlewares.plain-to-www.redirectregex.replacement=https://www.$1
+      - traefik.http.middlewares.traefik-dash-auth.basicauth.users=${TRAEFIK_USERS}
+
+
+  dockge:
+    image: louislam/dockge:1
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/dockge/data:/app/data
+        
+      # If you want to use private registries, you need to share the auth file with Dockge:
+      # - /root/.docker/:/root/.docker
+
+      # Stacks Directory
+      # ⚠️ READ IT CAREFULLY. If you did it wrong, your data could end up writing into a WRONG PATH.
+      # ⚠️ 1. FULL path only. No relative path (MUST)
+      # ⚠️ 2. Left Stacks Path === Right Stacks Path (MUST)
+      - /opt/stacks:/opt/stacks
+    environment:
+      # Tell Dockge where is your stacks directory
+      - DOCKGE_STACKS_DIR=/opt/stacks
+    labels:
+      - "traefik.http.routers.rtr-dockge.rule=Host(`dockge.${DOMAIN}`)"
+      - traefik.http.routers.rtr-dockge.tls=true
+      - traefik.http.routers.rtr-dockge.tls.certResolver=letsencrypt
+      - traefik.http.services.srv-dockge.loadbalancer.server.port=5001
+    networks:
+      - default
+      - webgateway
+
+networks:
+  webgateway:
+    external: true
